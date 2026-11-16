@@ -152,7 +152,7 @@ tfoot td{font-weight:700}
   var D = {articulos:[], ventas:[], cierres:[]}, cats = CATS_BASE.slice(), pin = null;
   var S = {pant:'inicio', modo:null, cat:null, art:null, foto:null, blob:null, mini:null, precio:'', uds:1,
            f:{}, carro:[], ocupado:false, aviso:null, hecho:null, nuevaCat:false, ver:null, dev:null,
-           per:'7', exp:null, bloqueado:false, recierre:false};
+           per:'7', exp:null, bloqueado:false, recierre:false, editCats:false, quitar:null};
   var app = document.getElementById('app');
 
   /* ---------- utilidades ---------- */
@@ -393,7 +393,7 @@ tfoot td{font-weight:700}
   /* ---------- acciones ---------- */
   function limpiar(){
     S.modo=null;S.cat=null;S.art=null;S.foto=null;S.blob=null;S.mini=null;S.precio='';S.uds=1;S.f={};S.carro=[];
-    S.ocupado=false;S.nuevaCat=false;S.ver=null;S.dev=null;S.exp=null;S.recierre=false;
+    S.ocupado=false;S.nuevaCat=false;S.ver=null;S.dev=null;S.exp=null;S.recierre=false;S.editCats=false;S.quitar=null;
   }
   function ir(p){S.pant=p;S.aviso=null;pintar();window.scrollTo(0,0);}
   function fin(texto){limpiar();S.hecho=texto;S.pant='inicio';S.aviso=null;pintar();window.scrollTo(0,0);}
@@ -562,8 +562,19 @@ tfoot td{font-weight:700}
       '</div>'+
       '<p class="pie-app">'+(modo==='claude'?'Los datos se guardan en tu cuenta de Claude.':(modo==='local'?'Los datos se guardan solo en este dispositivo. Haz copias de seguridad desde Ajustes.':''))+'</p>';
   }
+  function piezasDe(cat){var n=0,i;for(i=0;i<D.articulos.length;i++){if(D.articulos[i].cat===cat)n+=D.articulos[i].stock||0;}return n;}
   function pCat(){
-    var h=cabecera(true)+pasos(2)+avisos()+'<h1>'+(S.modo==='venta'?'¿Qué tipo de artículo has vendido?':'¿Qué tipo de artículo es?')+'</h1><div class="rejilla">',i,n;
+    var h=cabecera(true)+pasos(2)+avisos(),i,n;
+    if(S.editCats){
+      h+='<h1>¿Qué tipo quieres quitar?</h1><p class="tenue">Solo se pueden quitar tipos sin piezas en la tienda. Las ventas ya hechas conservan su tipo.</p><div class="rejilla">';
+      for(i=0;i<cats.length;i++){
+        n=piezasDe(cats[i]);
+        h+='<button class="cat" data-a="cat-quitar" data-i="'+i+'"'+(S.quitar===i?' style="border-color:var(--aviso);color:var(--aviso)"':'')+'>'+esc(cats[i])+
+           '<span>'+(S.quitar===i?'Toca otra vez para quitarlo':(n?n+(n===1?' pieza':' piezas')+', no se puede quitar':'Tocar para quitar'))+'</span></button>';
+      }
+      return h+'</div><button class="accion" data-a="cats-fin">Terminar</button>';
+    }
+    h+='<h1>'+(S.modo==='venta'?'¿Qué tipo de artículo has vendido?':'¿Qué tipo de artículo es?')+'</h1><div class="rejilla">';
     for(i=0;i<cats.length;i++){
       n=enStock(cats[i]);
       h+='<button class="cat" data-a="cat" data-i="'+i+'"'+(S.modo==='venta'&&n===0?' disabled':'')+'>'+esc(cats[i])+'<span>'+(n===0?'Sin piezas':n+(n===1?' pieza':' piezas'))+'</span></button>';
@@ -571,6 +582,7 @@ tfoot td{font-weight:700}
     if(S.modo==='nuevo'&&!S.nuevaCat)h+='<button class="cat nueva" data-a="cat-nueva">+ Otro tipo<span>Añadir una categoría</span></button>';
     h+='</div>';
     if(S.nuevaCat){h+='<h2>Nueva categoría</h2>'+campo('catNombre','Nombre','text','Por ejemplo, Bufandas')+'<button class="accion" data-a="cat-guardar">Añadir y continuar</button>';}
+    else if(S.modo==='nuevo'){h+='<button class="accion sec" data-a="cats-editar">Quitar tipos</button>';}
     return h;
   }
   function pFoto(){
@@ -750,7 +762,8 @@ tfoot td{font-weight:700}
   /* ---------- eventos ---------- */
   function atras(){
     var p=S.pant;
-    if(p==='cat'){if(S.modo==='venta'&&S.carro.length){ir('ticket');}else{limpiar();ir('inicio');}}
+    if(p==='cat'&&S.editCats){S.editCats=false;S.quitar=null;ir('cat');}
+    else if(p==='cat'){if(S.modo==='venta'&&S.carro.length){ir('ticket');}else{limpiar();ir('inicio');}}
     else if(p==='foto'||p==='elegir'){S.nuevaCat=false;ir('cat');}
     else if(p==='ficha'){ir('foto');}
     else if(p==='precio'){ir(S.modo==='venta'?'elegir':'ficha');}
@@ -767,6 +780,16 @@ tfoot td{font-weight:700}
     else if(a==='inicio'){limpiar();ir('inicio');}
     else if(a==='ir'){S.exp=null;ir(el.getAttribute('data-p'));}
     else if(a==='cat'){S.cat=cats[Number(el.getAttribute('data-i'))];S.nuevaCat=false;ir(S.modo==='venta'?'elegir':'foto');}
+    else if(a==='cats-editar'){S.editCats=true;S.quitar=null;S.aviso=null;pintar();}
+    else if(a==='cats-fin'){S.editCats=false;S.quitar=null;S.aviso=null;pintar();}
+    else if(a==='cat-quitar'){
+      i=Number(el.getAttribute('data-i'));S.aviso=null;
+      if(piezasDe(cats[i])>0){S.quitar=null;S.aviso='Todavía hay piezas de '+cats[i]+' en la tienda. Véndelas o retíralas antes de quitar el tipo.';pintar();return;}
+      if(cats.length<=1){S.quitar=null;S.aviso='Tiene que quedar al menos un tipo de artículo.';pintar();return;}
+      if(S.quitar!==i){S.quitar=i;pintar();return;}
+      nom=cats[i];cats=cats.slice(0,i).concat(cats.slice(i+1));S.quitar=null;
+      guardarCats().then(function(){S.hecho='Tipo '+nom+' quitado.';pintar();},fallo);
+    }
     else if(a==='cat-nueva'){S.nuevaCat=true;pintar();c=document.getElementById('f-catNombre');if(c)c.focus();}
     else if(a==='cat-guardar'){
       nom=limpio(S.f.catNombre).slice(0,30);
