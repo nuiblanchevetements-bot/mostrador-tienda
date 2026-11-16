@@ -1,0 +1,24 @@
+MOSTRADOR DE TIENDA - versión independiente
+
+Qué hay en esta carpeta
+  index.html      la app completa
+  sw.js           hace que funcione sin conexión
+  manifest.json   nombre e icono al instalarla
+  icon.png        icono
+
+Cómo ponerla en marcha
+  1. Sube los cuatro archivos tal cual a cualquier alojamiento de páginas
+     estáticas con https (Netlify, GitHub Pages, Cloudflare Pages o el
+     hosting de tu dominio).
+  2. Abre la dirección en Safari en el iPad.
+  3. Toca Compartir > Añadir a pantalla de inicio.
+
+Dónde se guardan los datos
+  Solo en el dispositivo donde se usa (artículos, fotos, ventas y cierres).
+  No hay servidor. Descarga copias de seguridad desde Ajustes y guárdalas
+  fuera del iPad: si se borra Safari o se estropea el iPad, sin copia se
+  pierde todo.
+
+Requisitos
+  Funcionar sin conexión e instalarse necesita iOS 11.3 o posterior.
+  En versiones anteriores la app abre, pero solo con conexión.
