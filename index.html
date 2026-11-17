@@ -68,6 +68,8 @@ p{margin:0 0 12px}
 .rejilla{display:grid;grid-template-columns:repeat(3,1fr);grid-gap:14px;gap:14px}
 .cat{display:block;width:100%;min-height:104px;border-radius:14px;background:var(--panel);border:2px solid var(--linea);padding:16px;text-align:left;font-weight:600;font-size:21px}
 .cat span{display:block;font-weight:400;font-size:15px;color:var(--tenue);margin-top:6px}
+.cat .cara{float:left;width:72px;height:72px;border-radius:10px;object-fit:cover;margin:0 14px 0 0;background:var(--linea)}
+.cat i.cara{display:block}
 .cat.nueva{border-style:dashed;color:var(--acento)}
 .cat.baja{min-height:72px;font-size:18px}
 .ficha{display:block;width:100%;border-radius:14px;overflow:hidden;background:var(--panel);border:2px solid var(--linea);text-align:left}
@@ -135,6 +137,7 @@ tfoot td{font-weight:700}
   .rejilla{grid-template-columns:repeat(2,1fr)}
   .resumen{grid-template-columns:repeat(2,1fr)}
   .tres{grid-template-columns:1fr}
+  .cat .cara{width:52px;height:52px;margin-right:10px}
   .gran{min-height:110px;font-size:26px}
   .pasos li{font-size:11px}
 }
@@ -170,7 +173,7 @@ tfoot td{font-weight:700}
   function src(a){return a?(a.foto?'/_blob/'+a.foto:(a.img||a.mini||'')):'';}
   function imgLinea(l){var a=buscar(l.articulo);return a?src(a):src(l);}
   function titulo(o){return o.nombre||o.cat||'Artículo';}
-  function detalle(o){var p=[];if(o.talla)p.push('T. '+o.talla);if(o.color)p.push(o.color);if(o.ref)p.push('Ref. '+o.ref);return p.join(' · ');}
+  function detalle(o){var p=[];if(o.talla)p.push('T. '+o.talla);if(o.color)p.push(o.color);if(o.estampado||o.ref)p.push(o.estampado||o.ref);return p.join(' · ');}
   function hash(s){var h=5381,i;for(i=0;i<s.length;i++){h=((h<<5)+h+s.charCodeAt(i))|0;}return 'h'+h;}
   function norm(v){
     if(!v.lineas){
@@ -361,14 +364,14 @@ tfoot td{font-weight:700}
   function csvVentas(soloHoy){
     function q(s){return '"'+String(s==null?'':s).replace(/"/g,'""')+'"';}
     function n(x){return r2(x).toFixed(2).replace('.',',');}
-    var hoy=dia(new Date()),f=['Fecha;Hora;Ticket;Tipo;Estado;Motivo;Categoria;Articulo;Referencia;Talla;Color;Precio;Coste;Descuento ticket;Total ticket;Efectivo;Tarjeta'],i,j,v,l;
+    var hoy=dia(new Date()),f=['Fecha;Hora;Ticket;Tipo;Estado;Motivo;Categoria;Articulo;Estampado;Talla;Color;Precio;Coste;Descuento ticket;Total ticket;Efectivo;Tarjeta'],i,j,v,l;
     for(i=D.ventas.length-1;i>=0;i--){
       v=D.ventas[i];if(soloHoy&&v.dia!==hoy)continue;
       for(j=0;j<v.lineas.length;j++){
         l=v.lineas[j];
         f.push([v.dia,hora(v.ts),q(v.id),v.tipo==='devolucion'?'Devolución':'Venta',
           v.anulada?'Anulada':(l.devuelta?'Devuelta':'Correcta'),q(v.anulada?v.anulada.motivo:''),
-          q(l.cat),q(l.nombre),q(l.ref),q(l.talla),q(l.color),n(l.precio),(l.coste?n(l.coste):''),
+          q(l.cat),q(l.nombre),q(l.estampado||l.ref),q(l.talla),q(l.color),n(l.precio),(l.coste?n(l.coste):''),
           n(v.descuento),n(v.total),n(v.efectivo),n(v.tarjeta)].join(';'));
       }
     }
@@ -401,7 +404,7 @@ tfoot td{font-weight:700}
   function guardarArticulo(){
     var precio=num(S.precio);
     S.ocupado=true;S.aviso=null;pintar();
-    var data={cat:S.cat,nombre:limpio(S.f.nombre),talla:limpio(S.f.talla),color:limpio(S.f.color),ref:limpio(S.f.ref),
+    var data={cat:S.cat,nombre:limpio(S.f.nombre),talla:limpio(S.f.talla),color:limpio(S.f.color),estampado:limpio(S.f.estampado),
               precio:precio,stock:S.uds,creado:Date.now()};
     if(num(S.f.coste)>0)data.coste=num(S.f.coste);
     var sube;
@@ -562,6 +565,8 @@ tfoot td{font-weight:700}
       '</div>'+
       '<p class="pie-app">'+(modo==='claude'?'Los datos se guardan en tu cuenta de Claude.':(modo==='local'?'Los datos se guardan solo en este dispositivo. Haz copias de seguridad desde Ajustes.':''))+'</p>';
   }
+  function portada(cat){var m=null,i,a;for(i=0;i<D.articulos.length;i++){a=D.articulos[i];if(a.cat===cat&&src(a)&&(!m||(a.creado||0)<(m.creado||0)))m=a;}return m?src(m):'';}
+  function cara(cat){var u=portada(cat);return u?'<img class="cara" src="'+esc(u)+'" alt="">':'<i class="cara"></i>';}
   function piezasDe(cat){var n=0,i;for(i=0;i<D.articulos.length;i++){if(D.articulos[i].cat===cat)n+=D.articulos[i].stock||0;}return n;}
   function pCat(){
     var h=cabecera(true)+pasos(2)+avisos(),i,n;
@@ -569,7 +574,7 @@ tfoot td{font-weight:700}
       h+='<h1>¿Qué tipo quieres quitar?</h1><p class="tenue">Solo se pueden quitar tipos sin piezas en la tienda. Las ventas ya hechas conservan su tipo.</p><div class="rejilla">';
       for(i=0;i<cats.length;i++){
         n=piezasDe(cats[i]);
-        h+='<button class="cat" data-a="cat-quitar" data-i="'+i+'"'+(S.quitar===i?' style="border-color:var(--aviso);color:var(--aviso)"':'')+'>'+esc(cats[i])+
+        h+='<button class="cat" data-a="cat-quitar" data-i="'+i+'"'+(S.quitar===i?' style="border-color:var(--aviso);color:var(--aviso)"':'')+'>'+cara(cats[i])+esc(cats[i])+
            '<span>'+(S.quitar===i?'Toca otra vez para quitarlo':(n?n+(n===1?' pieza':' piezas')+', no se puede quitar':'Tocar para quitar'))+'</span></button>';
       }
       return h+'</div><button class="accion" data-a="cats-fin">Terminar</button>';
@@ -577,7 +582,7 @@ tfoot td{font-weight:700}
     h+='<h1>'+(S.modo==='venta'?'¿Qué tipo de artículo has vendido?':'¿Qué tipo de artículo es?')+'</h1><div class="rejilla">';
     for(i=0;i<cats.length;i++){
       n=enStock(cats[i]);
-      h+='<button class="cat" data-a="cat" data-i="'+i+'"'+(S.modo==='venta'&&n===0?' disabled':'')+'>'+esc(cats[i])+'<span>'+(n===0?'Sin piezas':n+(n===1?' pieza':' piezas'))+'</span></button>';
+      h+='<button class="cat" data-a="cat" data-i="'+i+'"'+(S.modo==='venta'&&n===0?' disabled':'')+'>'+cara(cats[i])+esc(cats[i])+'<span>'+(n===0?'Sin piezas':n+(n===1?' pieza':' piezas'))+'</span></button>';
     }
     if(S.modo==='nuevo'&&!S.nuevaCat)h+='<button class="cat nueva" data-a="cat-nueva">+ Otro tipo<span>Añadir una categoría</span></button>';
     h+='</div>';
@@ -597,9 +602,9 @@ tfoot td{font-weight:700}
     return h;
   }
   function pFicha(){
-    return cabecera(true)+pasos(4)+avisos()+'<h1>Ficha del artículo</h1><p class="tenue">Todos los campos son opcionales. El coste sirve para calcular el margen.</p>'+
+    return cabecera(true)+pasos(4)+avisos()+'<h1>Ficha del artículo</h1><p class="tenue">El nombre viene del tipo elegido; cámbialo si quieres. El resto es opcional y el coste sirve para calcular el margen.</p>'+
       '<div class="dos"><div>'+campo('nombre','Nombre','text','Por ejemplo, Chaqueta vaquera')+campo('talla','Talla','text','M')+campo('color','Color','text','Azul')+'</div>'+
-      '<div>'+campo('ref','Referencia','text','CH-014')+campo('coste','Precio de coste (€)','dec','0,00')+'</div></div>'+
+      '<div>'+campo('estampado','Estampado','text','Por ejemplo, cuadros rojos y verdes')+campo('coste','Precio de coste (€)','dec','0,00')+'</div></div>'+
       '<button class="accion" data-a="ir" data-p="precio">Continuar</button>';
   }
   function pElegir(){
@@ -779,7 +784,7 @@ tfoot td{font-weight:700}
     else if(a==='atras'){atras();}
     else if(a==='inicio'){limpiar();ir('inicio');}
     else if(a==='ir'){S.exp=null;ir(el.getAttribute('data-p'));}
-    else if(a==='cat'){S.cat=cats[Number(el.getAttribute('data-i'))];S.nuevaCat=false;ir(S.modo==='venta'?'elegir':'foto');}
+    else if(a==='cat'){S.cat=cats[Number(el.getAttribute('data-i'))];S.nuevaCat=false;if(S.modo==='nuevo')S.f.nombre=S.cat;ir(S.modo==='venta'?'elegir':'foto');}
     else if(a==='cats-editar'){S.editCats=true;S.quitar=null;S.aviso=null;pintar();}
     else if(a==='cats-fin'){S.editCats=false;S.quitar=null;S.aviso=null;pintar();}
     else if(a==='cat-quitar'){
@@ -796,8 +801,8 @@ tfoot td{font-weight:700}
       if(!nom){S.aviso='Escribe el nombre de la categoría.';pintar();return;}
       ya=null;for(i=0;i<cats.length;i++){if(cats[i].toLowerCase()===nom.toLowerCase())ya=cats[i];}
       S.nuevaCat=false;S.f.catNombre='';
-      if(ya){S.cat=ya;ir('foto');return;}
-      cats=cats.concat([nom]);S.cat=nom;
+      if(ya){S.cat=ya;S.f.nombre=ya;ir('foto');return;}
+      cats=cats.concat([nom]);S.cat=nom;S.f.nombre=nom;
       guardarCats().then(function(){ir('foto');},fallo);
     }
     else if(a==='art'){S.art=buscar(el.getAttribute('data-id'));if(S.art){S.precio=String(S.art.precio).replace('.',',');ir('precio');}}
@@ -807,7 +812,7 @@ tfoot td{font-weight:700}
       if(num(S.precio)<=0){S.aviso='Escribe un precio mayor que cero.';pintar();return;}
       if(S.modo==='venta'){
         c=S.art;
-        S.carro.push({articulo:c.id,nombre:c.nombre||'',cat:c.cat,talla:c.talla||'',color:c.color||'',ref:c.ref||'',precio:num(S.precio),coste:c.coste||0});
+        S.carro.push({articulo:c.id,nombre:c.nombre||'',cat:c.cat,talla:c.talla||'',color:c.color||'',estampado:c.estampado||c.ref||'',precio:num(S.precio),coste:c.coste||0});
         S.art=null;S.precio='';ir('ticket');
       }else guardarArticulo();
     }
