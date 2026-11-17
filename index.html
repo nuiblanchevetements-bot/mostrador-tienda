@@ -57,7 +57,7 @@ h2{font-family:var(--f-titulo);font-weight:700;font-size:20px;margin:28px 0 10px
 p{margin:0 0 12px}
 .tenue{color:var(--tenue);font-size:15px}
 .dos{display:grid;grid-template-columns:1fr 1fr;grid-gap:16px;gap:16px}
-.tres{display:grid;grid-template-columns:repeat(3,1fr);grid-gap:12px;gap:12px;margin-top:28px}
+.tres{display:grid;grid-template-columns:repeat(4,1fr);grid-gap:12px;gap:12px;margin-top:28px}
 .gran{display:block;width:100%;min-height:150px;border-radius:18px;padding:22px;text-align:left;font-family:var(--f-titulo);font-weight:700;font-size:30px;line-height:1.1;background:var(--panel);border:2px solid var(--linea)}
 .gran small{display:block;font-family:var(--f-texto);font-weight:400;font-size:16px;color:var(--tenue);margin-top:10px}
 .gran.principal{background:var(--acento);border-color:var(--acento);color:var(--sobre-acento)}
@@ -136,7 +136,7 @@ tfoot td{font-weight:700}
   .dos,.precio{grid-template-columns:1fr}
   .rejilla{grid-template-columns:repeat(2,1fr)}
   .resumen{grid-template-columns:repeat(2,1fr)}
-  .tres{grid-template-columns:1fr}
+  .tres{grid-template-columns:1fr 1fr}
   .cat .cara{width:52px;height:52px;margin-right:10px}
   .gran{min-height:110px;font-size:26px}
   .pasos li{font-size:11px}
@@ -155,7 +155,7 @@ tfoot td{font-weight:700}
   var D = {articulos:[], ventas:[], cierres:[]}, cats = CATS_BASE.slice(), pin = null;
   var S = {pant:'inicio', modo:null, cat:null, art:null, foto:null, blob:null, mini:null, precio:'', uds:1,
            f:{}, carro:[], ocupado:false, aviso:null, hecho:null, nuevaCat:false, ver:null, dev:null,
-           per:'7', exp:null, bloqueado:false, recierre:false, editCats:false, quitar:null};
+           per:'7', exp:null, bloqueado:false, recierre:false, editCats:false, quitar:null, borrarArt:null, borrarTodo:false};
   var app = document.getElementById('app');
 
   /* ---------- utilidades ---------- */
@@ -197,6 +197,25 @@ tfoot td{font-weight:700}
 
   /* ---------- almacén ---------- */
   function nuevoId(){return 'l'+Date.now().toString(36)+Math.floor(Math.random()*1e6).toString(36);}
+  function idbDel(col,id){
+    return new Promise(function(res,rej){
+      if(!idb){res();return;}
+      try{var tx=idb.transaction(col,'readwrite');tx.objectStore(col)['delete'](id);
+        tx.oncomplete=function(){res();};tx.onerror=tx.onabort=function(){rej({code:'local'});};}catch(e){rej({code:'local'});}
+    });
+  }
+  function idbVaciar(cols){
+    return new Promise(function(res,rej){
+      if(!idb){res();return;}
+      try{var tx=idb.transaction(cols,'readwrite');cols.forEach(function(c){tx.objectStore(c).clear();});
+        tx.oncomplete=function(){res();};tx.onerror=tx.onabort=function(){rej({code:'local'});};}catch(e){rej({code:'local'});}
+    });
+  }
+  function quitarDoc(col,id){
+    var l=D[col],i;for(i=0;i<l.length;i++){if(l[i].id===id){l.splice(i,1);break;}}
+    if(modo==='claude'){return db.collection(col).doc(id)['delete']();}
+    return idbDel(col,id);
+  }
   function idbPut(col,obj){
     return new Promise(function(res,rej){
       if(!idb){res();return;}
@@ -396,7 +415,7 @@ tfoot td{font-weight:700}
   /* ---------- acciones ---------- */
   function limpiar(){
     S.modo=null;S.cat=null;S.art=null;S.foto=null;S.blob=null;S.mini=null;S.precio='';S.uds=1;S.f={};S.carro=[];
-    S.ocupado=false;S.nuevaCat=false;S.ver=null;S.dev=null;S.exp=null;S.recierre=false;S.editCats=false;S.quitar=null;
+    S.ocupado=false;S.nuevaCat=false;S.ver=null;S.dev=null;S.exp=null;S.recierre=false;S.editCats=false;S.quitar=null;S.borrarArt=null;S.borrarTodo=false;
   }
   function ir(p){S.pant=p;S.aviso=null;pintar();window.scrollTo(0,0);}
   function fin(texto){limpiar();S.hecho=texto;S.pant='inicio';S.aviso=null;pintar();window.scrollTo(0,0);}
@@ -560,6 +579,7 @@ tfoot td{font-weight:700}
       (!listo?'<div class="vacio">Cargando…</div>':(n?'<ul class="lista">'+filas+'</ul><p class="tenue" style="margin-top:8px">Toca un movimiento para ver el ticket, devolver una pieza o anularlo.</p>':'<div class="vacio">Todavía no hay ventas hoy. Toca Venta cuando cobres la primera.</div>'))+
       '<div class="tres">'+
         '<button class="cat baja" data-a="ir" data-p="cierre">Cierre de caja<span>'+(c?'Cerrada a las '+hora(c.ts):'Pendiente')+'</span></button>'+
+        '<button class="cat baja" data-a="ir" data-p="articulos">Artículos<span>Ver y borrar piezas</span></button>'+
         '<button class="cat baja" data-a="ir" data-p="informes">Informes<span>Ventas, margen y parados</span></button>'+
         (modo==='claude'?'':'<button class="cat baja" data-a="ir" data-p="ajustes">Ajustes<span>PIN y copia de seguridad</span></button>')+
       '</div>'+
@@ -741,6 +761,24 @@ tfoot td{font-weight:700}
     }
     return h;
   }
+  function pArticulos(){
+    var h=cabecera(true,true)+avisos()+'<h1>Artículos guardados</h1>',i,j,a,det,lista,o=S.ocupado?' disabled':'',hay=false;
+    h+='<p class="tenue">Borrar un artículo lo quita de la tienda. Las ventas que ya tuviera siguen en el historial.</p>';
+    for(i=0;i<cats.length+1;i++){
+      lista=D.articulos.filter(function(x){return i<cats.length?x.cat===cats[i]:cats.indexOf(x.cat)<0;});
+      if(!lista.length)continue;hay=true;
+      h+='<h2>'+(i<cats.length?esc(cats[i]):'Sin tipo')+'</h2><ul class="lista">';
+      for(j=0;j<lista.length;j++){
+        a=lista[j];det=detalle(a);
+        h+='<li>'+miniatura(src(a))+'<div>'+esc(titulo(a))+'<br><span class="hora">'+(det?esc(det)+' · ':'')+(a.stock||0)+((a.stock||0)===1?' ud.':' uds.')+'</span></div>'+
+           '<div class="imp">'+euros(a.precio)+'<br>'+(S.borrarArt===a.id
+             ?'<button class="enlace" data-a="art-borrar" data-id="'+esc(a.id)+'"'+o+'>Confirmar borrado</button>'
+             :'<button class="enlace" data-a="art-borrar" data-id="'+esc(a.id)+'">Borrar</button>')+'</div></li>';
+      }
+      h+='</ul>';
+    }
+    return h+(hay?'':'<div class="vacio">No hay artículos guardados.</div>');
+  }
   function pAjustes(){
     var o=S.ocupado?' disabled':'';
     return cabecera(true,true)+avisos()+'<h1>Ajustes</h1>'+
@@ -750,9 +788,12 @@ tfoot td{font-weight:700}
       '<h2>Copia de seguridad</h2><p class="tenue">Los datos viven solo en este dispositivo. Descarga una copia de vez en cuando y guárdala fuera del iPad.</p>'+
       '<button class="accion sec" data-a="copia"'+o+'>Descargar copia de seguridad</button>'+
       '<label class="accion sec">Restaurar desde una copia<input class="oculto" type="file" accept=".json,application/json" id="restaurar"></label>'+exportado()+
+      '<h2>Empezar de cero</h2><p class="tenue">Borra todos los artículos, ventas y cierres de caja de este dispositivo. Los tipos de artículo y el PIN se quedan. No se puede deshacer: descarga antes una copia si quieres conservar algo.</p>'+
+      '<button class="accion peligro" data-a="todo-borrar"'+o+'>'+(S.borrarTodo?'Sí, borrar todo ahora':'Borrar todos los datos')+'</button>'+
+      (S.borrarTodo?'<button class="accion sec" data-a="todo-no">No, dejarlo como está</button>':'')+
       '<h2>Instalar en el iPad</h2><p class="tenue">Abre esta página en Safari, toca Compartir y elige Añadir a pantalla de inicio. Se abrirá a pantalla completa y funcionará sin conexión.</p>';
   }
-  var PANT={cat:pCat,foto:pFoto,ficha:pFicha,elegir:pElegir,precio:pPrecio,ticket:pTicket,pago:pPago,detalle:pDetalle,cierre:pCierre,informes:pInformes,ajustes:pAjustes};
+  var PANT={cat:pCat,foto:pFoto,ficha:pFicha,elegir:pElegir,precio:pPrecio,ticket:pTicket,pago:pPago,detalle:pDetalle,cierre:pCierre,informes:pInformes,ajustes:pAjustes,articulos:pArticulos};
   function pintar(){
     if(modo!=='claude'){D.articulos.sort(function(a,b){return (b.creado||0)-(a.creado||0);});D.ventas.sort(function(a,b){return (b.ts||0)-(a.ts||0);});}
     else{D.articulos.sort(function(a,b){return (b.creado||0)-(a.creado||0);});}
@@ -835,6 +876,20 @@ tfoot td{font-weight:700}
       c=document.getElementById('exp-texto');
       if(c){c.focus();c.select();try{c.setSelectionRange(0,c.value.length);}catch(x){}
         try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(c.value)['catch'](function(){});}else{document.execCommand('copy');}}catch(x){}}
+    }
+    else if(a==='art-borrar'){
+      c=el.getAttribute('data-id');
+      if(S.borrarArt!==c){S.borrarArt=c;pintar();return;}
+      i=buscar(c);S.ocupado=true;pintar();
+      quitarDoc('articulos',c).then(function(){S.ocupado=false;S.borrarArt=null;S.hecho=(i?titulo(i):'Artículo')+' borrado.';pintar();},fallo);
+    }
+    else if(a==='todo-no'){S.borrarTodo=false;pintar();}
+    else if(a==='todo-borrar'){
+      if(!S.borrarTodo){S.borrarTodo=true;pintar();return;}
+      S.ocupado=true;pintar();
+      idbVaciar(['articulos','ventas','cierres']).then(function(){
+        D.articulos=[];D.ventas=[];D.cierres=[];S.ocupado=false;S.borrarTodo=false;S.hecho='Datos borrados. La app está vacía.';pintar();
+      },fallo);
     }
     else if(a==='per'){S.per=el.getAttribute('data-v');pintar();}
     else if(a==='pin-guardar'){
