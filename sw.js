@@ -1,5 +1,5 @@
 /* Mostrador: guarda la app en el dispositivo para que abra sin conexión. */
-var CACHE = 'mostrador-v9';
+var CACHE = 'mostrador-v10';
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(['./', 'index.html', 'manifest.json', 'icon.png']); }));
   self.skipWaiting();
