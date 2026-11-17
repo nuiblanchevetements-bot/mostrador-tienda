@@ -1,5 +1,5 @@
 /* Mostrador: guarda la app en el dispositivo para que abra sin conexión. */
-var CACHE = 'mostrador-v8';
+var CACHE = 'mostrador-v9';
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(['./', 'index.html', 'manifest.json', 'icon.png']); }));
   self.skipWaiting();
@@ -13,7 +13,7 @@ self.addEventListener('activate', function (e) {
 self.addEventListener('fetch', function (e) {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    fetch(e.request).then(function (r) {
+    fetch(e.request, { cache: 'no-store' }).then(function (r) {
       var copia = r.clone();
       caches.open(CACHE).then(function (c) { c.put(e.request, copia); });
       return r;
