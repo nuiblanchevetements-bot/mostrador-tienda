@@ -119,6 +119,7 @@ label.accion{cursor:pointer;position:relative;line-height:36px}
 .fila{margin-bottom:12px}
 .fila label{display:block;font-size:15px;color:var(--tenue);font-weight:500}
 .campo{display:block;width:100%;font:inherit;color:var(--tinta);background:var(--panel);border:2px solid var(--linea);border-radius:12px;padding:14px;margin-top:6px}
+select.campo{-webkit-appearance:none;appearance:none}
 textarea.campo{min-height:160px;font-size:14px;font-family:Menlo,Consolas,monospace}
 .total{background:var(--panel);border:2px solid var(--linea);border-radius:14px;padding:14px 18px;margin-top:14px;font-variant-numeric:tabular-nums}
 .total div{display:table;width:100%}
@@ -155,7 +156,7 @@ tfoot td{font-weight:700}
   var D = {articulos:[], ventas:[], cierres:[]}, cats = CATS_BASE.slice(), pin = null;
   var S = {pant:'inicio', modo:null, cat:null, art:null, foto:null, blob:null, mini:null, precio:'', uds:1,
            f:{}, carro:[], ocupado:false, aviso:null, hecho:null, nuevaCat:false, ver:null, dev:null,
-           per:'7', exp:null, bloqueado:false, recierre:false, editCats:false, quitar:null, borrarArt:null, borrarTodo:false};
+           per:'7', exp:null, bloqueado:false, recierre:false, editCats:false, quitar:null, borrarArt:null, borrarTodo:false, edit:null};
   var app = document.getElementById('app');
 
   /* ---------- utilidades ---------- */
@@ -415,7 +416,7 @@ tfoot td{font-weight:700}
   /* ---------- acciones ---------- */
   function limpiar(){
     S.modo=null;S.cat=null;S.art=null;S.foto=null;S.blob=null;S.mini=null;S.precio='';S.uds=1;S.f={};S.carro=[];
-    S.ocupado=false;S.nuevaCat=false;S.ver=null;S.dev=null;S.exp=null;S.recierre=false;S.editCats=false;S.quitar=null;S.borrarArt=null;S.borrarTodo=false;
+    S.ocupado=false;S.nuevaCat=false;S.ver=null;S.dev=null;S.exp=null;S.recierre=false;S.editCats=false;S.quitar=null;S.borrarArt=null;S.borrarTodo=false;S.edit=null;
   }
   function ir(p){S.pant=p;S.aviso=null;pintar();window.scrollTo(0,0);}
   function fin(texto){limpiar();S.hecho=texto;S.pant='inicio';S.aviso=null;pintar();window.scrollTo(0,0);}
@@ -431,6 +432,24 @@ tfoot td{font-weight:700}
     else{sube=Promise.resolve().then(function(){if(modo==='claude')data.mini=S.mini;else data.img=S.foto;});}
     sube.then(function(){return crear('articulos',data);}).then(function(){
       fin('Artículo guardado en '+data.cat+' a '+euros(precio)+'.');
+    },fallo);
+  }
+  function guardarEdicion(){
+    var a=buscar(S.edit),precio=num(S.f.pv),uds=parseInt(String(S.f.uds||'').replace(/\D/g,''),10);
+    if(!a){S.aviso='Este artículo ya no existe.';pintar();return;}
+    if(precio<=0){S.aviso='Escribe un precio de venta mayor que cero.';pintar();return;}
+    if(isNaN(uds)){S.aviso='Escribe cuántas unidades hay en la tienda (puede ser 0).';pintar();return;}
+    var campos={cat:S.f.cat||a.cat,nombre:limpio(S.f.nombre),talla:limpio(S.f.talla),color:limpio(S.f.color),estampado:limpio(S.f.estampado),
+                precio:precio,stock:Math.min(uds,999),coste:num(S.f.coste)>0?num(S.f.coste):0};
+    S.ocupado=true;S.aviso=null;pintar();
+    var sube=Promise.resolve();
+    if(S.foto){
+      if(modo==='claude'&&assets){sube=assets.upload(S.blob).then(function(r){campos.foto=r.id;campos.mini='';},function(){campos.mini=S.mini;campos.foto='';});}
+      else if(modo==='claude'){campos.mini=S.mini;campos.foto='';}
+      else{campos.img=S.foto;}
+    }
+    sube.then(function(){return cambiar('articulos',a.id,campos);}).then(function(){
+      var t=titulo(campos);S.ocupado=false;S.edit=null;S.foto=null;S.blob=null;S.mini=null;S.f={};S.hecho=t+' actualizado.';S.pant='articulos';pintar();window.scrollTo(0,0);
     },fallo);
   }
   function guardarVenta(ef,ta){
@@ -773,11 +792,27 @@ tfoot td{font-weight:700}
         h+='<li>'+miniatura(src(a))+'<div>'+esc(titulo(a))+'<br><span class="hora">'+(det?esc(det)+' · ':'')+(a.stock||0)+((a.stock||0)===1?' ud.':' uds.')+'</span></div>'+
            '<div class="imp">'+euros(a.precio)+'<br>'+(S.borrarArt===a.id
              ?'<button class="enlace" data-a="art-borrar" data-id="'+esc(a.id)+'"'+o+'>Confirmar borrado</button>'
-             :'<button class="enlace" data-a="art-borrar" data-id="'+esc(a.id)+'">Borrar</button>')+'</div></li>';
+             :'<button class="enlace ok" data-a="art-editar" data-id="'+esc(a.id)+'">Editar</button> <button class="enlace" data-a="art-borrar" data-id="'+esc(a.id)+'">Borrar</button>')+'</div></li>';
       }
       h+='</ul>';
     }
     return h+(hay?'':'<div class="vacio">No hay artículos guardados.</div>');
+  }
+  function pEditar(){
+    var a=buscar(S.edit),h=cabecera(true,true)+avisos(),i,img,ops='';
+    if(!a)return h+'<div class="vacio">Este artículo ya no existe.</div>';
+    img=S.foto||src(a);
+    for(i=0;i<cats.length;i++){ops+='<option'+(cats[i]===S.f.cat?' selected':'')+'>'+esc(cats[i])+'</option>';}
+    if(cats.indexOf(S.f.cat)<0)ops='<option selected>'+esc(S.f.cat)+'</option>'+ops;
+    return h+'<h1>Editar artículo</h1><div class="precio"><div>'+
+      (img?'<div class="previa" style="margin:0 0 12px"><img src="'+esc(img)+'" alt="Foto del artículo"></div>':'<div class="vacio" style="margin-bottom:12px">Sin foto</div>')+
+      '<label class="accion sec" style="margin-top:0">'+(img?'Cambiar foto':'Añadir foto')+'<input class="oculto" type="file" accept="image/*" id="foto-cambio"></label></div><div>'+
+      '<div class="fila"><label for="f-cat">Tipo de artículo</label><select class="campo" id="f-cat" data-k="cat">'+ops+'</select></div>'+
+      campo('nombre','Nombre','text')+campo('pv','Precio de venta (€)','dec','0,00')+campo('uds','Unidades en tienda','pin')+
+      campo('talla','Talla','text','M')+campo('color','Color','text','Azul')+campo('estampado','Estampado','text','Por ejemplo, cuadros rojos y verdes')+
+      campo('coste','Precio de coste (€)','dec','0,00')+'</div></div>'+
+      '<p class="tenue">Los cambios no afectan a las ventas ya hechas, que conservan el precio y los datos con los que se vendieron.</p>'+
+      '<button class="accion" data-a="art-guardar"'+(S.ocupado?' disabled':'')+'>'+(S.ocupado?'Guardando…':'Guardar cambios')+'</button>';
   }
   function pAjustes(){
     var o=S.ocupado?' disabled':'';
@@ -793,7 +828,7 @@ tfoot td{font-weight:700}
       (S.borrarTodo?'<button class="accion sec" data-a="todo-no">No, dejarlo como está</button>':'')+
       '<h2>Instalar en el iPad</h2><p class="tenue">Abre esta página en Safari, toca Compartir y elige Añadir a pantalla de inicio. Se abrirá a pantalla completa y funcionará sin conexión.</p>';
   }
-  var PANT={cat:pCat,foto:pFoto,ficha:pFicha,elegir:pElegir,precio:pPrecio,ticket:pTicket,pago:pPago,detalle:pDetalle,cierre:pCierre,informes:pInformes,ajustes:pAjustes,articulos:pArticulos};
+  var PANT={cat:pCat,foto:pFoto,ficha:pFicha,elegir:pElegir,precio:pPrecio,ticket:pTicket,pago:pPago,detalle:pDetalle,cierre:pCierre,informes:pInformes,ajustes:pAjustes,articulos:pArticulos,editar:pEditar};
   function pintar(){
     if(modo!=='claude'){D.articulos.sort(function(a,b){return (b.creado||0)-(a.creado||0);});D.ventas.sort(function(a,b){return (b.ts||0)-(a.ts||0);});}
     else{D.articulos.sort(function(a,b){return (b.creado||0)-(a.creado||0);});}
@@ -815,6 +850,7 @@ tfoot td{font-weight:700}
     else if(p==='precio'){ir(S.modo==='venta'?'elegir':'ficha');}
     else if(p==='ticket'){ir('cat');}
     else if(p==='pago'){ir('ticket');}
+    else if(p==='editar'){S.edit=null;S.foto=null;S.blob=null;S.mini=null;S.f={};ir('articulos');}
     else{limpiar();ir('inicio');}
   }
   function accion(el){
@@ -877,6 +913,14 @@ tfoot td{font-weight:700}
       if(c){c.focus();c.select();try{c.setSelectionRange(0,c.value.length);}catch(x){}
         try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(c.value)['catch'](function(){});}else{document.execCommand('copy');}}catch(x){}}
     }
+    else if(a==='art-editar'){
+      c=buscar(el.getAttribute('data-id'));if(!c)return;
+      function txt(x){return x?String(x).replace('.',','):'';}
+      S.edit=c.id;S.borrarArt=null;S.foto=null;S.blob=null;S.mini=null;
+      S.f={cat:c.cat,nombre:c.nombre||c.cat||'',pv:txt(c.precio),uds:String(c.stock||0),talla:c.talla||'',color:c.color||'',estampado:c.estampado||c.ref||'',coste:txt(c.coste)};
+      ir('editar');
+    }
+    else if(a==='art-guardar'){guardarEdicion();}
     else if(a==='art-borrar'){
       c=el.getAttribute('data-id');
       if(S.borrarArt!==c){S.borrarArt=c;pintar();return;}
@@ -924,6 +968,7 @@ tfoot td{font-weight:700}
   });
   app.addEventListener('change',function(ev){
     var t=ev.target;
+    if(t&&t.tagName==='SELECT'&&t.getAttribute('data-k')){S.f[t.getAttribute('data-k')]=t.value;return;}
     if(!t||t.type!=='file'||!t.files||!t.files[0])return;
     if(t.id==='restaurar')restaurar(t.files[0]);else leerFoto(t.files[0]);
   });
